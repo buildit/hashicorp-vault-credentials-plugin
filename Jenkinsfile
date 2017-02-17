@@ -10,7 +10,7 @@ def artifactId = ""
 def branch = "master"
 def repositoryUrl = "https://github.com/buildit/hashicorp-vault-credentials-plugin.git"
 def gitCredentialsId = "global.github"
-def repositoryCredentialsId = "global.bitbucket"
+def repositoryCredentialsId = "global.bintray"
 
 try {
     currentBuild.result = "SUCCESS"
