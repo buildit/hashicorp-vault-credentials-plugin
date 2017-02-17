@@ -48,7 +48,7 @@ try {
         node() {
             withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: repositoryCredentialsId, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD']]) {
                 def credentials = "'${env.USERNAME}':'${env.PASSWORD}'"
-                sh("curl -v -u ${credentials} -T target/*.hpi \"https://bintray.com/buildit/maven/${artifactId}/${pomVersion}/${artifactId}-${pomVersion}.hpi?publish=1\"")
+                sh("curl -v -u ${credentials} -T target/*.hpi \"https://api.bintray.com/content/buildit/maven/${artifactId}/${pomVersion}/${artifactId}-${pomVersion}.hpi;publish=1\"")
             }
         }
     }
