@@ -10,7 +10,7 @@
 
     <groupId>digital.buildit</groupId>
     <artifactId>hashicorp-vault-credentials-plugin</artifactId>
-    <version>0.0.8</version>
+    <version>0.0.9</version>
     <packaging>hpi</packaging>
     <name>Hashicorp Vault Credentials Plugin</name>
 
