@@ -4,6 +4,7 @@ def pomUtil = new pom()
 def shellUtil = new shell()
 def gitUtil = new git()
 def toolsUtil = new tools()
+def mavenUtil = new mavensettings()
 
 def pomVersion = ""
 def artifactId = ""
@@ -11,6 +12,7 @@ def branch = "master"
 def repositoryUrl = "https://github.com/buildit/hashicorp-vault-credentials-plugin.git"
 def gitCredentialsId = "global.github"
 def repositoryCredentialsId = "global.bintray"
+def serverId = "bintray-hashicorp-vault-credentials-plugin"
 
 try {
     currentBuild.result = "SUCCESS"
@@ -28,11 +30,13 @@ try {
         }
     }
 
-    stage('create package') {
+    stage('build and deploy') {
         node() {
             def commitId = shellUtil.pipe("git rev-parse HEAD")
 
-            sh("mvn clean package")
+            mavenUtil.withSettingsXml(serverId, repositoryCredentialsId) { settingsXmlPath ->
+                sh("mvn clean deploy -s ${settingsXmlPath}")
+            }
 
             withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: gitCredentialsId, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD']]) {
                 def authenticatedUrl = gitUtil.authenticatedUrl(repositoryUrl, env.USERNAME, env.PASSWORD)
@@ -40,15 +44,6 @@ try {
                 sh("git remote set-url origin ${authenticatedUrl} &> /dev/null")
                 sh("git tag -af ${pomVersion} -m \"Built version: ${pomVersion}\" ${commitId}")
                 sh("git push --tags")
-            }
-        }
-    }
-
-    stage('promote package') {
-        node() {
-            withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: repositoryCredentialsId, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD']]) {
-                def credentials = "'${env.USERNAME}':'${env.PASSWORD}'"
-                sh("curl -v -u ${credentials} -T target/*.hpi \"https://api.bintray.com/content/buildit/maven/${artifactId}/${pomVersion}/${artifactId}-${pomVersion}.hpi;publish=1\"")
             }
         }
     }
