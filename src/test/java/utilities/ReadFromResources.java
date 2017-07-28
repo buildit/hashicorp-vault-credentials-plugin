@@ -1,4 +1,4 @@
-package digital.buildit.jenkins.credentials.vault.utilities;
+package utilities;
 
 import org.apache.commons.io.IOUtils;
 

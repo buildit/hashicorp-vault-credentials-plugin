@@ -1,68 +1,77 @@
 package digital.buildit.jenkins.credentials.vault;
 
-import com.cloudbees.plugins.credentials.CredentialsProvider;
-import com.cloudbees.plugins.credentials.CredentialsStore;
+import com.cloudbees.plugins.credentials.*;
 import com.cloudbees.plugins.credentials.domains.Domain;
-import com.datapipe.jenkins.vault.VaultBuildWrapper;
-import hudson.ExtensionList;
+import com.datapipe.jenkins.vault.configuration.GlobalVaultConfiguration;
+import com.datapipe.jenkins.vault.configuration.VaultConfiguration;
+import com.datapipe.jenkins.vault.credentials.VaultAppRoleCredential;
+import com.datapipe.jenkins.vault.credentials.VaultTokenCredential;
 import hudson.model.Label;
+import hudson.util.Secret;
+import jenkins.model.GlobalConfiguration;
 import jenkins.model.Jenkins;
 import org.apache.commons.io.FileUtils;
+import org.eclipse.jetty.server.Server;
 import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.jvnet.hudson.test.JenkinsRule;
-import spark.Request;
-import spark.Response;
-import spark.Route;
+
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.concurrent.ExecutionException;
 
-import static digital.buildit.jenkins.credentials.vault.utilities.ReadFromResources.readFromResources;
+import static utilities.HttpJsonServer.startServer;
+import static utilities.ReadFromResources.readFromResources;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertThat;
-import static spark.Spark.get;
+import static utilities.ResourcePath.resourcePath;
+
 
 public class HashicorpVaultCredentialsTest {
 
     private static final String VAULT_ADDRESS = "http://localhost:4567";
-    private static final String VAULT_TOKEN = "12345678910";
+    private static final String GLOBAL_CREDENTIALS_ID_1 = "global-1";
+
+    private Credentials GLOBAL_CREDENTIAL_1;
 
     @Rule
     public JenkinsRule jenkinsRule = new JenkinsRule();
+
+    public Server server;
 
     @Before
     public void setup() throws Exception {
         jenkinsRule.createOnlineSlave(Label.get("slaves"));
 
-        ExtensionList<VaultBuildWrapper.DescriptorImpl> extensionList = Jenkins.getInstance().getExtensionList(VaultBuildWrapper.DescriptorImpl.class);
-        VaultBuildWrapper.DescriptorImpl descriptor = extensionList.get(0);
-        descriptor.setVaultUrl(VAULT_ADDRESS);
-        descriptor.setAuthToken(VAULT_TOKEN);
+        GLOBAL_CREDENTIAL_1 = createTokenCredential(GLOBAL_CREDENTIALS_ID_1);
 
-        get("/v1/secret/cloudfoundry", new Route() {
-            @Override
-            public Object handle(Request req, Response res) throws Exception {
-                res.type("application/json");
-                return readFromResources("vault-secret-cloudfoundry.json");
-            }
-        });
+        SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(Domain.global(), Arrays
+                .asList(GLOBAL_CREDENTIAL_1)));
 
-        get("/v1/secret/custom", new Route() {
-            @Override
-            public Object handle(Request req, Response res) throws Exception {
-                res.type("application/json");
-                return readFromResources("vault-secret-custom.json");
-            }
-        });
+        GlobalVaultConfiguration globalConfig = GlobalConfiguration.all().get(GlobalVaultConfiguration.class);
+        globalConfig.setConfiguration(new VaultConfiguration(VAULT_ADDRESS, GLOBAL_CREDENTIALS_ID_1));
+
+        globalConfig.save();
+
+        server = startServer(resourcePath("."), 4567);
+
     }
 
+    @After
+    public void teardown() throws Exception {
+        server.stop();
+    }
+
+
     @Test
-    public void shouldRetrieveCorrectCredentialsFromVault() throws ExecutionException, InterruptedException, IOException {
+    public void shouldRetrieveCorrectCredentialsFromVault() throws Exception {
 
         CredentialsStore store = CredentialsProvider.lookupStores(Jenkins.getInstance()).iterator().next();
         store.addCredentials(Domain.global(), new HashicorpVaultCredentialsImpl(null, "cloudfoundry", "secret/cloudfoundry", null, null, "Test Credentials"));
@@ -73,6 +82,7 @@ public class HashicorpVaultCredentialsTest {
         WorkflowRun workflowRun = p.scheduleBuild2(0).get();
         String log = FileUtils.readFileToString(workflowRun.getLogFile());
         assertThat(log, containsString("spiderman:peterparker"));
+
     }
 
     @Test
@@ -102,5 +112,9 @@ public class HashicorpVaultCredentialsTest {
         String log = FileUtils.readFileToString(workflowRun.getLogFile());
         assertThat(log, containsString("Vault responded with HTTP status code: 404"));
         assertThat(log, containsString("Finished: FAILURE"));
+    }
+
+    public static Credentials createTokenCredential(final String credentialId) {
+        return new VaultTokenCredential(CredentialsScope.GLOBAL, credentialId, "description", Secret.fromString("secret-id-"+credentialId));
     }
 }
